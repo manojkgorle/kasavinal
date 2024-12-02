@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	url        = "http://127.0.0.1:41671/ext/bc/2Kq7SNubXwGmS12ZdSUrWLaPtu95otDE3fs5JsgxhftToMje9g"
+	url        = "http://127.0.0.1:45567/ext/bc/2mgSrj2xG9gagfhi5vSJwe6XiH2HmWinPxYCxhoZGSQzynRWPG"
 	networkID  = 1337
-	chainIDStr = "2Kq7SNubXwGmS12ZdSUrWLaPtu95otDE3fs5JsgxhftToMje9g"
+	chainIDStr = "2mgSrj2xG9gagfhi5vSJwe6XiH2HmWinPxYCxhoZGSQzynRWPG"
 )
 
 type LightHeader struct {
@@ -29,7 +29,7 @@ type LightHeader struct {
 }
 
 func main() {
-	log.Println("starting wsc")
+	log.Println("starting light client")
 	wsc, err := rpc.NewWebSocketClient(url, rpc.DefaultHandshakeTimeout, pubsub.MaxPendingMessages, pubsub.MaxReadMessageSize)
 	if err != nil {
 		log.Fatalln(err)
