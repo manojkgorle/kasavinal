@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"fmt"
+	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -15,9 +16,9 @@ import (
 )
 
 const (
-	url        = "http://127.0.0.1:44637/ext/bc/sobnA86EN5P46FJ7ozF48vzkhQzyx9kMo6dh1dukBvyr9Rccm"
+	url        = "http://127.0.0.1:41671/ext/bc/2Kq7SNubXwGmS12ZdSUrWLaPtu95otDE3fs5JsgxhftToMje9g"
 	networkID  = 1337
-	chainIDStr = "sobnA86EN5P46FJ7ozF48vzkhQzyx9kMo6dh1dukBvyr9Rccm"
+	chainIDStr = "2Kq7SNubXwGmS12ZdSUrWLaPtu95otDE3fs5JsgxhftToMje9g"
 )
 
 type LightHeader struct {
@@ -28,10 +29,10 @@ type LightHeader struct {
 }
 
 func main() {
-	fmt.Println("starting wsc")
+	log.Println("starting wsc")
 	wsc, err := rpc.NewWebSocketClient(url, rpc.DefaultHandshakeTimeout, pubsub.MaxPendingMessages, pubsub.MaxReadMessageSize)
 	if err != nil {
-		panic(err)
+		log.Fatalln(err)
 	}
 	chainID, _ := ids.FromString(chainIDStr)
 	ctx := context.Background()
@@ -39,15 +40,17 @@ func main() {
 	parser, _ := mcli.Parser(ctx)
 	cli := rpc.NewJSONRPCClient(url)
 	lhchan := make(chan LightHeader)
-	fmt.Println(wsc.RegisterLightClient())
+	err = wsc.RegisterLightClient()
+	if err != nil {
+		log.Fatalln(err)
+	}
 	go func() {
 		for {
-			fmt.Println("listening for light headers")
+			log.Println("listening for light headers")
 			hght, dataRoot, rowRoots, colRoots, err := wsc.ListenLightHeaders(ctx, parser)
 			if err != nil {
-				panic(err)
+				log.Fatalln(err)
 			}
-			fmt.Println("received light header")
 			lhchan <- LightHeader{
 				Height:   hght,
 				DataRoot: dataRoot,
@@ -60,7 +63,7 @@ func main() {
 	for {
 		lh := <-lhchan
 		if len(lh.RowRoots) != len(lh.ColRoots) {
-			panic("invalid light header")
+			log.Fatalln("invalid light header, height: ", lh.Height)
 		}
 		w := len(lh.RowRoots)
 		n := w * w
@@ -72,24 +75,36 @@ func main() {
 		} else {
 			s = n / 2
 		}
+		log.Printf("recevied light header for block %d, rows: %d\n", lh.Height, w)
 		rand.Seed(time.Now().UnixNano())
+		var k int         // Counter
+		var mu sync.Mutex // Mutex for safe access to k
+
+		var wg sync.WaitGroup // WaitGroup to wait for all goroutines to complete
+
 		for i := 0; i < s; i++ {
-			var k int
+			wg.Add(1) // Increment the WaitGroup counter
 			go func() {
+				defer wg.Done() // Decrement the WaitGroup counter when goroutine finishes
 				rowIDx := rand.Intn(w)
 				colIDx := rand.Intn(w)
-				fmt.Println("fetching shares for row %d, column %d for block %d", rowIDx, colIDx, lh.Height)
+				log.Printf("fetching shares for row %d, column %d for block %d\n", rowIDx, colIDx, lh.Height)
 				proofs, err := cli.GetShareRowProofs(ctx, lh.Height, uint(rowIDx), uint(colIDx))
 				if err != nil {
 					panic(err)
 				}
 				if merkletree.VerifyProof(sha256.New(), lh.RowRoots[rowIDx], proofs, uint64(colIDx), uint64(w)) {
+					mu.Lock()
 					k++
+					mu.Unlock()
 				} else {
-					panic("cant verify")
+					panic("can't verify")
 				}
-				fmt.Println("sampled successfully: %d", k)
 			}()
 		}
+
+		wg.Wait() // Wait for all sampling goroutines to complete
+		log.Printf("Total successful samples for block %d: %d of %d\n", lh.Height, k, s)
 	}
+
 }
