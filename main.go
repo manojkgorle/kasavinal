@@ -98,14 +98,14 @@ func main() {
 					log.Printf("fetching shares for row %d, column %d for block %d\n", rowIDx, colIDx, lh.Height)
 					proofs, err := cli.GetShareRowProofs(ctx, lh.Height, uint(rowIDx), uint(colIDx))
 					if err != nil {
-						panic(err)
+						log.Println("can't fetch share proofs, rejected block")
 					}
 					if merkletree.VerifyProof(sha256.New(), lh.RowRoots[rowIDx], proofs, uint64(colIDx), uint64(w)) {
 						mu.Lock()
 						k++
 						mu.Unlock()
 					} else {
-						panic("can't verify")
+						panic("can't verify, rejected block")
 					}
 				}()
 			}
